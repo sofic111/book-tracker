@@ -1,0 +1,355 @@
+import json
+import os
+from datetime import datetime, timedelta
+from typing import List, Dict, Any
+from collections import defaultdict
+
+# ========== СТРУКТУРА ДАННЫХ ==========
+DATA_FILE = "purchases.json"
+
+
+class Purchase:
+    """Класс для представления покупки"""
+    
+    def __init__(self, name: str, price: float, category: str, date: str):
+        self.name = name
+        self.price = price
+        self.category = category
+        self.date = date
+    
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "price": self.price,
+            "category": self.category,
+            "date": self.date
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> "Purchase":
+        return cls(
+            name=data["name"],
+            price=data["price"],
+            category=data["category"],
+            date=data["date"]
+        )
+    
+    def __repr__(self) -> str:
+        return f"{self.date} | {self.name} | {self.category} | {self.price:.2f} ₽"
+
+
+# ========== УПРАВЛЕНИЕ ПОКУПКАМИ ==========
+purchases: List[Purchase] = []
+
+
+def add_purchase():
+    """Добавить новую покупку"""
+    print("\n" + "=" * 40)
+    print("➕ ДОБАВЛЕНИЕ ПОКУПКИ")
+    print("=" * 40)
+    
+    name = input("Название товара: ").strip()
+    if not name:
+        print("❌ Название не может быть пустым!")
+        return
+    
+    try:
+        price = float(input("Цена (₽): ").strip())
+        if price < 0:
+            print("❌ Цена не может быть отрицательной!")
+            return
+    except ValueError:
+        print("❌ Введите корректную цену!")
+        return
+    
+    category = input("Категория (например: Продукты, Транспорт, Развлечения): ").strip()
+    if not category:
+        category = "Прочее"
+    
+    date = input("Дата покупки (ГГГГ-ММ-ДД) или Enter для сегодняшней: ").strip()
+    if not date:
+        date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Проверка формата даты
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        print("❌ Неверный формат даты! Используйте ГГГГ-ММ-ДД")
+        return
+    
+    purchase = Purchase(name, price, category, date)
+    purchases.append(purchase)
+    save_data()
+    print(f"\n✅ Покупка \"{name}\" добавлена!")
+
+
+def view_purchases():
+    """Показать все покупки"""
+    print("\n" + "=" * 60)
+    print("📋 ВСЕ ПОКУПКИ")
+    print("=" * 60)
+    
+    if not purchases:
+        print("📭 Список покупок пуст.")
+        return
+    
+    # Сортируем по дате (сначала новые)
+    sorted_purchases = sorted(purchases, key=lambda x: x.date, reverse=True)
+    
+    print(f"{'Дата':<12} | {'Название':<20} | {'Категория':<15} | {'Цена':>10}")
+    print("-" * 60)
+    
+    total = 0
+    for p in sorted_purchases:
+        print(f"{p.date:<12} | {p.name:<20} | {p.category:<15} | {p.price:>9.2f} ₽")
+        total += p.price
+    
+    print("-" * 60)
+    print(f"{'ИТОГО:':<49} {total:>9.2f} ₽")
+
+
+# ========== АНАЛИЗ РАСХОДОВ ==========
+def total_spent():
+    """Посчитать общую сумму всех покупок"""
+    if not purchases:
+        print("\n📭 Нет покупок для подсчёта.")
+        return
+    
+    total = sum(p.price for p in purchases)
+    print("\n" + "=" * 40)
+    print(f"💰 ОБЩАЯ СУММА РАСХОДОВ: {total:.2f} ₽")
+    print("=" * 40)
+
+
+def spent_by_category():
+    """Сгруппировать расходы по категориям"""
+    if not purchases:
+        print("\n📭 Нет покупок для анализа.")
+        return
+    
+    category_totals = defaultdict(float)
+    for p in purchases:
+        category_totals[p.category] += p.price
+    
+    print("\n" + "=" * 40)
+    print("📊 РАСХОДЫ ПО КАТЕГОРИЯМ")
+    print("=" * 40)
+    
+    # Сортируем по убыванию суммы
+    sorted_cats = sorted(category_totals.items(), key=lambda x: x[1], reverse=True)
+    
+    for category, total in sorted_cats:
+        print(f"  {category}: {total:.2f} ₽")
+    
+    grand_total = sum(p.price for p in purchases)
+    print("-" * 30)
+    print(f"  ВСЕГО: {grand_total:.2f} ₽")
+
+
+def spent_by_period():
+    """Показать расходы за выбранный период"""
+    if not purchases:
+        print("\n📭 Нет покупок для анализа.")
+        return
+    
+    print("\n" + "=" * 40)
+    print("📅 РАСХОДЫ ЗА ПЕРИОД")
+    print("=" * 40)
+    print("1. День")
+    print("2. Неделя")
+    print("3. Месяц")
+    print("4. Произвольный период")
+    print("5. Назад")
+    
+    choice = input("\nВыберите вариант (1-5): ").strip()
+    
+    today = datetime.now().date()
+    filtered_purchases = []
+    
+    if choice == "1":
+        # День
+        date_str = today.strftime("%Y-%m-%d")
+        filtered_purchases = [p for p in purchases if p.date == date_str]
+        period_name = f"день ({date_str})"
+    
+    elif choice == "2":
+        # Неделя
+        week_ago = today - timedelta(days=7)
+        filtered_purchases = [p for p in purchases if datetime.strptime(p.date, "%Y-%m-%d").date() >= week_ago]
+        period_name = f"неделя ({week_ago} - {today})"
+    
+    elif choice == "3":
+        # Месяц
+        month_ago = today - timedelta(days=30)
+        filtered_purchases = [p for p in purchases if datetime.strptime(p.date, "%Y-%m-%d").date() >= month_ago]
+        period_name = f"месяц ({month_ago} - {today})"
+    
+    elif choice == "4":
+        # Произвольный период
+        start_date = input("Начальная дата (ГГГГ-ММ-ДД): ").strip()
+        end_date = input("Конечная дата (ГГГГ-ММ-ДД): ").strip()
+        
+        try:
+            start = datetime.strptime(start_date, "%Y-%m-%d").date()
+            end = datetime.strptime(end_date, "%Y-%m-%d").date()
+            filtered_purchases = [
+                p for p in purchases 
+                if start <= datetime.strptime(p.date, "%Y-%m-%d").date() <= end
+            ]
+            period_name = f"{start_date} - {end_date}"
+        except ValueError:
+            print("❌ Неверный формат даты!")
+            return
+    
+    elif choice == "5":
+        return
+    
+    else:
+        print("❌ Неверный выбор!")
+        return
+    
+    if not filtered_purchases:
+        print(f"\n📭 Нет покупок за {period_name}.")
+        return
+    
+    total = sum(p.price for p in filtered_purchases)
+    
+    print(f"\n{'=' * 50}")
+    print(f"📅 ПЕРИОД: {period_name}")
+    print(f"💰 СУММА РАСХОДОВ: {total:.2f} ₽")
+    print(f"📊 КОЛИЧЕСТВО ПОКУПОК: {len(filtered_purchases)}")
+    print("=" * 50)
+    
+    # Показать детали
+    show_details = input("\nПоказать детали покупок? (да/нет): ").strip().lower()
+    if show_details in ("да", "yes", "y", "д"):
+        print(f"\n{'Дата':<12} | {'Название':<20} | {'Категория':<15} | {'Цена':>10}")
+        print("-" * 60)
+        for p in sorted(filtered_purchases, key=lambda x: x.date, reverse=True):
+            print(f"{p.date:<12} | {p.name:<20} | {p.category:<15} | {p.price:>9.2f} ₽")
+
+
+def top_categories():
+    """Показать топ категорий по расходам"""
+    if not purchases:
+        print("\n📭 Нет покупок для анализа.")
+        return
+    
+    category_totals = defaultdict(float)
+    for p in purchases:
+        category_totals[p.category] += p.price
+    
+    sorted_cats = sorted(category_totals.items(), key=lambda x: x[1], reverse=True)
+    
+    print("\n" + "=" * 40)
+    print("🏆 ТОП КАТЕГОРИЙ ПО РАСХОДАМ")
+    print("=" * 40)
+    
+    for i, (category, total) in enumerate(sorted_cats[:5], 1):
+        print(f"  {i}. {category}: {total:.2f} ₽")
+
+
+# ========== РАБОТА С ДАННЫМИ ==========
+def save_data():
+    """Сохранить все покупки в JSON-файл"""
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump([p.to_dict() for p in purchases], f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"❌ Ошибка при сохранении данных: {e}")
+
+
+def load_data():
+    """Загрузить покупки из JSON-файла"""
+    global purchases
+    
+    if not os.path.exists(DATA_FILE):
+        return
+    
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            purchases = [Purchase.from_dict(item) for item in data]
+    except Exception as e:
+        print(f"❌ Ошибка при загрузке данных: {e}")
+
+
+def delete_last_purchase():
+    """Удалить последнюю покупку"""
+    if not purchases:
+        print("\n📭 Нет покупок для удаления.")
+        return
+    
+    last = purchases[-1]
+    print(f"\n🗑️ Удалить последнюю покупку?")
+    print(f"   {last}")
+    
+    confirm = input("Подтвердите удаление (да/нет): ").strip().lower()
+    if confirm in ("да", "yes", "y", "д"):
+        purchases.pop()
+        save_data()
+        print(f"✅ Покупка \"{last.name}\" удалена!")
+    else:
+        print("❌ Удаление отменено.")
+
+
+# ========== ОСНОВНАЯ ПРОГРАММА ==========
+def show_menu():
+    """Показать главное меню"""
+    print("\n" + "=" * 50)
+    print("🛒 АНАЛИЗАТОР ПОКУПОК")
+    print("=" * 50)
+    print("1. ➕ Добавить покупку")
+    print("2. 📋 Показать все покупки")
+    print("3. 💰 Общая сумма расходов")
+    print("4. 📊 Расходы по категориям")
+    print("5. 📅 Расходы за период")
+    print("6. 🏆 Топ категорий")
+    print("7. 🗑️ Удалить последнюю покупку")
+    print("8. 💾 Сохранить данные")
+    print("9. 🔄 Загрузить данные")
+    print("0. 🚪 Выход")
+    print("=" * 50)
+
+
+def main():
+    """Главное меню консольного приложения"""
+    load_data()
+    
+    print("\nДобро пожаловать в Анализатор покупок!")
+    print(f"Загружено {len(purchases)} покупок.")
+    
+    while True:
+        show_menu()
+        choice = input("Выберите действие (0-9): ").strip()
+        
+        if choice == "1":
+            add_purchase()
+        elif choice == "2":
+            view_purchases()
+        elif choice == "3":
+            total_spent()
+        elif choice == "4":
+            spent_by_category()
+        elif choice == "5":
+            spent_by_period()
+        elif choice == "6":
+            top_categories()
+        elif choice == "7":
+            delete_last_purchase()
+        elif choice == "8":
+            save_data()
+            print("✅ Данные сохранены!")
+        elif choice == "9":
+            load_data()
+            print(f"✅ Данные загружены! ({len(purchases)} покупок)")
+        elif choice == "0":
+            save_data()
+            print("\n👋 До свидания! Данные сохранены.")
+            break
+        else:
+            print("❌ Неверный выбор. Попробуйте снова.")
+
+
+if __name__ == "__main__":
+    main()
